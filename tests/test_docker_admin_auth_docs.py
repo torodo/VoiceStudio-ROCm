@@ -103,6 +103,24 @@ def test_compose_wsl_rocm_service_carries_the_dxg_bridge():
     assert "- /opt/rocm/share/rocdxg/dids.conf" not in service
 
 
+def test_wsl_rocm_launcher_drives_the_wsl_profile_without_leaking_the_key():
+    script = (ROOT / "scripts/wsl-rocm.sh").read_text(encoding="utf-8")
+    launcher = (ROOT / "scripts/wsl-rocm.ps1").read_text(encoding="utf-8")
+
+    assert "--profile rocm-wsl" in script
+    assert 'CONTAINER="omnivoice-studio-rocm-wsl"' in script
+    assert "container_name: omnivoice-studio-rocm-wsl" in (
+        ROOT / "deploy/docker-compose.yml"
+    ).read_text(encoding="utf-8")
+    # The key stays on the distribution's filesystem, owner-only, and is only
+    # printed on an explicit `key --show`.
+    assert 'ENV_FILE="${VOICESTUDIO_ENV_FILE:-$HOME/.voicestudio.env}"' in script
+    assert "umask 077" in script and 'chmod 600 "$ENV_FILE"' in script
+    assert script.count("printf '%s\\n' \"$key\"") == 1
+    assert 'if [ "${1:-}" = "--show" ]; then' in script
+    assert "wsl-rocm.sh" in launcher
+
+
 def test_wsl_rocm_setup_pins_match_the_rocm_image():
     """The host ROCm and librocdxg must pair with the image's ROCm release.
 

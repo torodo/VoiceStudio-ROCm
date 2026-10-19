@@ -141,10 +141,16 @@ and the other cards in AMD's
    distribution's `/opt/rocm` and `/dev/dxg`.
 3. `bash scripts/wsl-rocm-setup.sh --check-docker` runs PyTorch inside the image
    and fails unless it sees the GPU and completes a matrix multiply.
-4. Start the backend with `docker compose -f deploy/docker-compose.yml --profile rocm-wsl up -d`,
-   or the equivalent `docker run` below. WSL forwards `127.0.0.1:3900` to
-   Windows: open it in a browser, or point the Windows desktop app at it as a
-   [remote backend](../remote-gpu.md) with the same API key.
+4. Start the backend from Windows with `.\scripts\wsl-rocm.ps1` (or
+   `bash scripts/wsl-rocm.sh start` inside WSL). On first run it creates the
+   API key in `~/.voicestudio.env` in the distribution (mode 600, outside the
+   repository), starts the `rocm-wsl` compose profile, waits for the health
+   check and opens `http://localhost:3900`. `stop`, `restart`, `status`,
+   `logs` and `update` do what they say; `key` copies the API key to the
+   Windows clipboard for the desktop app's [remote backend](../remote-gpu.md)
+   settings. The manual equivalent is
+   `docker compose --env-file ~/.voicestudio.env -f deploy/docker-compose.yml --profile rocm-wsl up -d`,
+   or the `docker run` below.
 
 ```bash
 docker run -d --name omnivoice \

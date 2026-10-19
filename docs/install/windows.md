@@ -102,9 +102,10 @@ still works on CPU, just slower. What you can do today:
   automatically.
 - **Run the backend in WSL2** for ROCm acceleration of the PyTorch engines on
   Radeon RX 7000 / RX 9000 cards, without leaving Windows: Adrenalin 26.2.2+,
-  `bash scripts/wsl-rocm-setup.sh --with-docker` inside Ubuntu, then the ROCm
-  image with the `rocm-wsl` compose profile. Use it from a browser at
-  `http://localhost:3900` or from this app as a remote backend — see
+  `bash scripts/wsl-rocm-setup.sh --with-docker` inside Ubuntu once, then
+  `.\scripts\wsl-rocm.ps1` (`stop`, `status`, `key`…) to run the ROCm image.
+  Use it from a browser at `http://localhost:3900` or from this app as a
+  remote backend — see
   [docker.md — AMD GPU on WSL2](docker.md#amd-gpu-on-wsl2).
 - **Run on Linux** (native, or the ROCm Docker image) for ROCm acceleration of
   the PyTorch engines — see [linux.md — AMD GPU (ROCm)](linux.md#amd-gpu-rocm).

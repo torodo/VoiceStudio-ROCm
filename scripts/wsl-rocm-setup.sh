@@ -182,4 +182,4 @@ fi
 
 check_rocminfo
 say "Done. Next: bash scripts/wsl-rocm-setup.sh --check-docker, then"
-echo "  docker compose -f deploy/docker-compose.yml --profile rocm-wsl up -d"
+echo "  bash scripts/wsl-rocm.sh start   (or .\\scripts\\wsl-rocm.ps1 from Windows)"
