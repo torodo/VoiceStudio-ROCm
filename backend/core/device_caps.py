@@ -190,8 +190,11 @@ _DXG_DEVICE = "/dev/dxg"
 _DXG_RUNTIME_PATHS = (
     "/usr/lib/libdxcore.so",
     "/usr/lib/librocdxg.so",
-    "/usr/share/rocdxg/dids.conf",
 )
+#: Device-ID list mounted beside librocdxg 1.2.1+, AMD's pairing for ROCm 7.13+.
+#: librocdxg 1.2.0 (the ROCm 7.2.x pairing) has the list built in and ships no
+#: such file, so demanding it there would blame a correct setup.
+_DXG_DIDS_CONF = "/usr/share/rocdxg/dids.conf"
 
 
 def _rocm_requires_dxg_detection(version: object) -> bool:
@@ -293,9 +296,10 @@ def why_no_gpu(torch, gpus=None) -> tuple[str, ...]:
                         "reachable, but this pre-7.13 runtime requires "
                         "HSA_ENABLE_DXG_DETECTION=1 inside WSL containers",
                     )
-                missing = [
-                    path for path in _DXG_RUNTIME_PATHS if not os.path.exists(path)
-                ]
+                expected = _DXG_RUNTIME_PATHS
+                if not _rocm_requires_dxg_detection(hip):
+                    expected = (*expected, _DXG_DIDS_CONF)
+                missing = [path for path in expected if not os.path.exists(path)]
                 if missing:
                     return (
                         f"ROCm {hip} can reach {_DXG_DEVICE}, but the WSL "

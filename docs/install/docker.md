@@ -124,16 +124,33 @@ docker run -d --name omnivoice \
 ### AMD GPU on WSL2
 
 WSL exposes AMD compute through `/dev/dxg`, not native Linux's `/dev/kfd` and
-`/dev/dri`. First install ROCm and `librocdxg` in the WSL distribution and
-confirm the host-side `rocminfo` lists the GPU. Then use the WSL-specific
-bridge flags from AMD's `librocdxg` container contract:
+`/dev/dri`. This is the GPU route for Radeon cards on Windows (RX 7000 / RX 9000
+and the other cards in AMD's
+[`librocdxg` matrix](https://github.com/ROCm/librocdxg#wsl-compatibility-matrix)).
+
+1. **On Windows:** install AMD Software Adrenalin **26.2.2 or newer** (the first
+   driver with ROCDXG support), then run `wsl --update` in PowerShell.
+2. **In the WSL distribution** (Ubuntu 24.04 or 22.04), from a checkout:
+   `bash scripts/wsl-rocm-setup.sh --with-docker`. It removes pre-7.x ROCm
+   packages (they have no ROCDXG support), installs the ROCm 7.2.4 runtime and
+   `librocdxg` 1.2.0 — the pair matching the image's ROCm 7.2.x — sets
+   `HSA_ENABLE_DXG_DETECTION=1` in `~/.bashrc` (timestamped backup first),
+   installs Docker Engine inside the distribution, and fails unless `rocminfo`
+   lists a GPU agent. Use Docker Engine in the distribution rather than Docker
+   Desktop's WSL integration: the bridge mounts assume the engine sees the
+   distribution's `/opt/rocm` and `/dev/dxg`.
+3. `bash scripts/wsl-rocm-setup.sh --check-docker` runs PyTorch inside the image
+   and fails unless it sees the GPU and completes a matrix multiply.
+4. Start the backend with `docker compose -f deploy/docker-compose.yml --profile rocm-wsl up -d`,
+   or the equivalent `docker run` below. WSL forwards `127.0.0.1:3900` to
+   Windows: open it in a browser, or point the Windows desktop app at it as a
+   [remote backend](../remote-gpu.md) with the same API key.
 
 ```bash
 docker run -d --name omnivoice \
   --device /dev/dxg \
   -v /usr/lib/wsl/lib/libdxcore.so:/usr/lib/libdxcore.so \
   -v /opt/rocm/lib/librocdxg.so:/usr/lib/librocdxg.so \
-  -v /opt/rocm/share/rocdxg/dids.conf:/usr/share/rocdxg/dids.conf \
   -e HSA_ENABLE_DXG_DETECTION=1 \
   --cap-add SYS_PTRACE \
   --security-opt seccomp=unconfined \
@@ -145,7 +162,11 @@ docker run -d --name omnivoice \
 ```
 
 The image currently uses ROCm 7.2.x, so `HSA_ENABLE_DXG_DETECTION=1` is
-required; AMD removed that requirement only in ROCk 7.13. The ptrace and
+required; AMD removed that requirement only in ROCm 7.13. ROCm 7.2.x pairs with
+`librocdxg` 1.2.0, which has its device list built in and ships no
+`dids.conf`. Add `-v /opt/rocm/share/rocdxg/dids.conf:/usr/share/rocdxg/dids.conf`
+only with `librocdxg` 1.2.1 or newer (ROCm 7.13+): mounting a file that does
+not exist makes Docker create an empty root-owned directory in its place. The ptrace and
 unconfined-seccomp flags weaken container isolation, so keep the published port
 on `127.0.0.1` and do not run untrusted workloads in this container. See AMD's
 [`librocdxg` WSL container instructions](https://github.com/ROCm/librocdxg#4-container-launch--wsl-specific-flags)
@@ -167,6 +188,7 @@ GPU-utilization evidence.
 
 | Hardware / architecture | Current classification | Detail |
 |---|---|---|
+| AMD Radeon RX 7800 XT / `gfx1101` through WSL2 ROCDXG | **Unverified** | Listed by AMD for `librocdxg` 1.2.0 / ROCm 7.2.x. VoiceStudio maps `gfx1101` to `gfx1100` only when the PyTorch build lacks `gfx1101`; no end-to-end validation has been published. |
 | AMD Radeon RX 6700 XT / `gfx1031` through WSL2 ROCDXG | **Unverified** | VoiceStudio can map `gfx1031` to `gfx1030` when that target exists in the PyTorch build, but no RX 6700 XT end-to-end validation has been published. |
 
 For an RX 6700 XT result to move out of **Unverified**, record the Windows AMD

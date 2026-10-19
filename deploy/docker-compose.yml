@@ -5,6 +5,7 @@
 #    docker compose -f deploy/docker-compose.yml --profile cpu up    # CPU mode
 #    docker compose -f deploy/docker-compose.yml --profile gpu up    # NVIDIA GPU
 #    docker compose -f deploy/docker-compose.yml --profile rocm up   # AMD GPU (ROCm)
+#    docker compose -f deploy/docker-compose.yml --profile rocm-wsl up  # AMD GPU, Windows WSL2
 #
 #  The Studio services publish the UI on loopback and the authenticated TLS
 #
@@ -144,6 +145,50 @@ services:
       # GPU is not detected, uncomment the override below. The backend
       # auto-sets it for known consumer GFX IDs, so try without it first.
       # - HSA_OVERRIDE_GFX_VERSION=11.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3900/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+    restart: unless-stopped
+
+  # ── AMD GPU on WSL2 (ROCDXG) — activate with: docker compose --profile rocm-wsl up
+  # Windows + Radeon: WSL exposes the GPU as /dev/dxg, not /dev/kfd + /dev/dri.
+  # Run Docker Engine inside the WSL distribution after
+  # `bash scripts/wsl-rocm-setup.sh --with-docker` (Adrenalin 26.2.2+ on
+  # Windows). The image ships ROCm 7.2.x, which pairs with librocdxg 1.2.0;
+  # librocdxg 1.2.1+ (ROCm 7.13+) also needs
+  # /opt/rocm/share/rocdxg/dids.conf:/usr/share/rocdxg/dids.conf mounted.
+  # ptrace + unconfined seccomp weaken isolation: keep the port on loopback.
+  omnivoice-rocm-wsl:
+    image: ghcr.io/debpalash/voicestudio:stable-rocm
+    container_name: omnivoice-studio-rocm-wsl
+    profiles: ["rocm-wsl"]
+    ports:
+      - "127.0.0.1:3900:3900"
+    devices:
+      - /dev/dxg
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
+    ipc: host
+    shm_size: 8g
+    volumes:
+      - omnivoice-data:/app/omnivoice_data
+      - /usr/lib/wsl/lib/libdxcore.so:/usr/lib/libdxcore.so:ro
+      - /opt/rocm/lib/librocdxg.so:/usr/lib/librocdxg.so:ro
+    environment:
+      - HF_HOME=/app/omnivoice_data/huggingface
+      - HF_TOKEN=${HF_TOKEN:-}
+      - OMNIVOICE_DATA_DIR=/app/omnivoice_data
+      - PYTHONPATH=/app/backend
+      - PYTHONUNBUFFERED=1
+      - OMNIVOICE_SERVER_MODE=1
+      - OMNIVOICE_API_KEY=${OMNIVOICE_API_KEY:?export a long random OMNIVOICE_API_KEY before starting a Studio profile}
+      # ROCm 7.2.x loads the WSL bridge only with this opt-in (ROCm 7.13+ drops it).
+      - HSA_ENABLE_DXG_DETECTION=1
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3900/health"]
       interval: 30s

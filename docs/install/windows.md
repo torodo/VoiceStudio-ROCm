@@ -100,6 +100,12 @@ still works on CPU, just slower. What you can do today:
   (Breeze-TTS-2) ships a Vulkan build that runs on Radeon GPUs: install the
   runtime from **Settings → Models**. VoiceStudio picks the discrete GPU
   automatically.
+- **Run the backend in WSL2** for ROCm acceleration of the PyTorch engines on
+  Radeon RX 7000 / RX 9000 cards, without leaving Windows: Adrenalin 26.2.2+,
+  `bash scripts/wsl-rocm-setup.sh --with-docker` inside Ubuntu, then the ROCm
+  image with the `rocm-wsl` compose profile. Use it from a browser at
+  `http://localhost:3900` or from this app as a remote backend — see
+  [docker.md — AMD GPU on WSL2](docker.md#amd-gpu-on-wsl2).
 - **Run on Linux** (native, or the ROCm Docker image) for ROCm acceleration of
   the PyTorch engines — see [linux.md — AMD GPU (ROCm)](linux.md#amd-gpu-rocm).
 - **Advanced / unsupported: AMD's own Windows ROCm wheels.** AMD publishes

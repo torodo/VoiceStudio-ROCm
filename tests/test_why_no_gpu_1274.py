@@ -98,11 +98,31 @@ def test_wsl_rocm_names_missing_runtime_mounts(linux, monkeypatch):
     )
     monkeypatch.setattr("core.device_caps.os.access", lambda *_args: True)
 
-    msg = _joined(_torch(hip="7.2.4"))
+    msg = _joined(_torch(hip="7.13.0"))
 
     assert "runtime mounts are incomplete" in msg
     assert "/usr/lib/librocdxg.so" in msg
     assert "/usr/share/rocdxg/dids.conf" in msg
+
+
+def test_rocm_7_2_wsl_does_not_demand_dids_conf(linux, monkeypatch):
+    # librocdxg 1.2.0, AMD's ROCm 7.2.x pairing, ships no dids.conf: a setup
+    # with only libdxcore + librocdxg mounted is complete, not broken.
+    monkeypatch.setenv("HSA_ENABLE_DXG_DETECTION", "1")
+    present = {"/dev/dxg", "/usr/lib/libdxcore.so"}
+    monkeypatch.setattr(
+        "core.device_caps.os.path.exists", lambda path: path in present
+    )
+    monkeypatch.setattr("core.device_caps.os.access", lambda *_args: True)
+
+    msg = _joined(_torch(hip="7.2.4"))
+    assert "/usr/lib/librocdxg.so" in msg
+    assert "dids.conf" not in msg
+
+    present.add("/usr/lib/librocdxg.so")
+    msg = _joined(_torch(hip="7.2.4"))
+    assert "runtime mounts are incomplete" not in msg
+    assert "no gpu was enumerated" in msg
 
 
 def test_current_wsl_rocm_does_not_demand_retired_opt_in(linux, monkeypatch):

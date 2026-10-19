@@ -35,7 +35,7 @@ def test_every_compose_studio_service_receives_the_admin_key():
         "OMNIVOICE_API_KEY=${OMNIVOICE_API_KEY:?export a long random "
         "OMNIVOICE_API_KEY before starting a Studio profile}"
     )
-    assert studio_half.count(required_key) == 3
+    assert studio_half.count(required_key) == 4
     assert "OMNIVOICE_API_KEY=${OMNIVOICE_API_KEY:-}" not in studio_half
 
 
@@ -67,12 +67,63 @@ def test_wsl_rocm_command_carries_the_complete_dxg_bridge():
         "--device /dev/dxg",
         "/usr/lib/wsl/lib/libdxcore.so:/usr/lib/libdxcore.so",
         "/opt/rocm/lib/librocdxg.so:/usr/lib/librocdxg.so",
-        "/opt/rocm/share/rocdxg/dids.conf:/usr/share/rocdxg/dids.conf",
         "HSA_ENABLE_DXG_DETECTION=1",
         "--cap-add SYS_PTRACE",
         "--security-opt seccomp=unconfined",
     ):
         assert required in section
+    # librocdxg 1.2.0 (the ROCm 7.2.x pairing) ships no dids.conf; mounting a
+    # missing file makes Docker create a root-owned directory in its place.
+    # The mount belongs to 1.2.1+ and is documented as such, not in the command.
+    command = next(
+        block
+        for block in re.findall(r"```bash\n(.*?)```", section, flags=re.DOTALL)
+        if "docker run" in block
+    )
+    assert "dids.conf" not in command
+    assert "/opt/rocm/share/rocdxg/dids.conf:/usr/share/rocdxg/dids.conf" in section
+
+
+def test_compose_wsl_rocm_service_carries_the_dxg_bridge():
+    text = (ROOT / "deploy/docker-compose.yml").read_text(encoding="utf-8")
+    service = text.split("  omnivoice-rocm-wsl:", 1)[1].split("\nvolumes:", 1)[0]
+
+    for required in (
+        'profiles: ["rocm-wsl"]',
+        "- /dev/dxg",
+        "/usr/lib/wsl/lib/libdxcore.so:/usr/lib/libdxcore.so:ro",
+        "/opt/rocm/lib/librocdxg.so:/usr/lib/librocdxg.so:ro",
+        "HSA_ENABLE_DXG_DETECTION=1",
+        "- SYS_PTRACE",
+        "- seccomp=unconfined",
+        '"127.0.0.1:3900:3900"',
+    ):
+        assert required in service
+    assert "/dev/kfd" not in service
+    assert "- /opt/rocm/share/rocdxg/dids.conf" not in service
+
+
+def test_wsl_rocm_setup_pins_match_the_rocm_image():
+    """The host ROCm and librocdxg must pair with the image's ROCm release.
+
+    librocdxg 1.2.0 is AMD's pairing for ROCm 7.2.x; 1.2.1+ targets ROCm 7.13+.
+    Moving the image's ROCm base without bumping the WSL setup would leave
+    Windows users with a bridge the container runtime cannot load.
+    """
+    workflow = (ROOT / ".github/workflows/docker.yml").read_text(encoding="utf-8")
+    image_rocm = re.search(r"BASE_IMAGE=rocm/pytorch:rocm(\d+\.\d+\.\d+)_", workflow)
+    assert image_rocm, "ROCm base image pin not found in docker.yml"
+
+    script = (ROOT / "scripts/wsl-rocm-setup.sh").read_text(encoding="utf-8")
+    host_rocm = re.search(r'^ROCM_VERSION="([\d.]+)"', script, flags=re.M).group(1)
+    rocdxg = re.search(r'^ROCDXG_VERSION="([\d.]+)"', script, flags=re.M).group(1)
+    deb = re.search(r'^AMDGPU_INSTALL_DEB="([^"]+)"', script, flags=re.M).group(1)
+
+    assert host_rocm == image_rocm.group(1)
+    assert deb.startswith(f"amdgpu-install_{host_rocm}.")
+    if tuple(map(int, host_rocm.split(".")[:2])) < (7, 13):
+        assert rocdxg == "1.2.0"
+        assert "HSA_ENABLE_DXG_DETECTION=1" in script
 
 
 def test_wsl_rocm_matrix_marks_rx_6700_xt_unverified():
