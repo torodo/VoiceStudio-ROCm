@@ -193,17 +193,13 @@ jobs:
   # Clicks every button on every route under four backend fault modes and fails
   # on stuck spinners, buttons left disabled, silent failures, crashes and
   # console errors
-  # (electron/tests/ui-crawler.mjs). Sharded by route so the deep crawl runs
-  # beside the main test job instead of lengthening it.
+  # (electron/tests/ui-crawler.mjs). One job, not a mode x shard matrix: the
+  # crawler runs every fault mode concurrently in one process, and a matrix of
+  # twelve jobs per push queued behind the runner limit for hours.
   ui-crawler:
-    name: UI crawler (${{ matrix.mode }} ${{ matrix.shard }})
+    name: UI crawler
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        mode: [fixture, http-500, network-error, bad-json]
-        shard: [1/3, 2/3, 3/3]
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -236,8 +232,6 @@ jobs:
         env:
           OMNIVOICE_PORT: '3999'
           VOICESTUDIO_UI_URL: http://localhost:3912
-          VOICESTUDIO_CRAWL_MODES: ${{ matrix.mode }}
-          VOICESTUDIO_CRAWL_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
           bun run --cwd electron smoke:server > /tmp/voicestudio-crawler-server.log 2>&1 &

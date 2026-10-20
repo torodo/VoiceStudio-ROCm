@@ -8,21 +8,19 @@ const dir = dirname(fileURLToPath(import.meta.url));
 const crawler = readFileSync(join(dir, 'ui-crawler.mjs'), 'utf8');
 const ci = readFileSync(join(dir, '../../.github/workflows/ci.yml'), 'utf8');
 
-const list = (source) => source.match(/'([^']+)'|[\w/-]+/g).map((item) => item.replaceAll("'", ''));
+const job = ci.match(/\n {2}ui-crawler:\n([\s\S]*?)\n {2}[\w-]+:\n/)[1];
 
-test('CI crawls every fault mode the crawler defines', () => {
-  const modes = list(crawler.match(/const MODES = \[([^\]]+)\]/)[1]);
-  const matrix = list(ci.match(/ui-crawler:[\s\S]*?mode: \[([^\]]+)\]/)[1]);
-  assert.deepEqual(matrix, modes);
+test('CI crawls every fault mode in one job', () => {
+  // A matrix would multiply runner jobs per push; the crawler runs the modes concurrently itself.
+  assert.doesNotMatch(job, /strategy:|matrix\./, 'ui-crawler must stay a single job');
+  // Narrowing the modes or routes in CI would silently skip the faults this job exists for.
+  assert.doesNotMatch(job, /VOICESTUDIO_CRAWL_(MODES|ROUTES|SHARD)/);
+  assert.match(crawler, /const MODES = \['fixture', 'http-500', 'network-error', 'bad-json'\]/);
 });
 
-test('CI shards cover every route exactly once', () => {
-  const shards = list(ci.match(/ui-crawler:[\s\S]*?shard: \[([^\]]+)\]/)[1]);
-  const total = Number(shards[0].split('/')[1]);
-  assert.deepEqual(
-    shards,
-    Array.from({ length: total }, (_, index) => `${index + 1}/${total}`),
-  );
+test('the single job leaves room for a full crawl', () => {
+  const minutes = Number(job.match(/timeout-minutes: (\d+)/)[1]);
+  assert.ok(minutes >= 30, `timeout-minutes ${minutes} is too short for every mode and route`);
 });
 
 test('crawler findings are fixed, not allowlisted', () => {

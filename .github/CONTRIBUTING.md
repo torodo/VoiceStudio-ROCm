@@ -313,7 +313,7 @@ OMNIVOICE_PORT=3999 bun run --cwd electron smoke:server &
 OMNIVOICE_PORT=3999 VOICESTUDIO_UI_URL=http://localhost:3912 PLAYWRIGHT_CHANNEL=chromium \
   node electron/tests/run-renderer-smokes.mjs [name-filter ...]
 
-# UI crawler (the sharded "UI crawler" CI jobs), against the same smoke server:
+# UI crawler (the "UI crawler" CI job), against the same smoke server:
 # clicks every enabled button on every route, then the buttons a filled-in form
 # enables, then one level into each dialog, while API writes answer normally,
 # with 500, with a network error, or with broken JSON. It fails on a spinner

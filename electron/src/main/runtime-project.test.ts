@@ -108,6 +108,30 @@ describe('packaged runtime setup', () => {
       expect(await runtimeReady(bundle, project)).toBe(true);
     },
   );
+  it.each([
+    ['after printing its result', true],
+    ['before printing anything', false],
+  ])('keeps setting up when the CUDA compatibility probe crashes natively %s', async (_name, printed) => {
+    forcePlatform('win32');
+    vi.spyOn(process, 'arch', 'get').mockReturnValue('x64');
+    vi.stubEnv('OMNIVOICE_TORCH_VARIANT', 'cuda');
+    const { bundle, project } = await fixture();
+    const sitePackages = join(project, '.venv', 'Lib', 'site-packages');
+    const run = vi.fn(async (_command: string, args: string[]) => {
+      if (args[0] === 'sync') await interpreter(project);
+      if (args[1]?.includes('VOICESTUDIO_CUDNN8_PROBE=')) {
+        throw Object.assign(new Error('Runtime setup exited with code 3221225477'), {
+          stdout: printed
+            ? `VOICESTUDIO_CUDNN8_PROBE=${JSON.stringify({ device: 'none', sitePackages })}\n`
+            : '',
+        });
+      }
+      return undefined;
+    });
+    await installRuntime(bundle, project, 'uv', run, new AbortController().signal, undefined, 'global');
+    expect(run.mock.calls.some(([, args]) => args[1] === RUNTIME_IMPORT_PROBE)).toBe(true);
+    expect(await runtimeReady(bundle, project)).toBe(true);
+  });
   it.each([0, 1])(
     'verifies the runtime when .pth repair attempt %i fails',
     async (failedAttempt) => {
@@ -265,6 +289,8 @@ describe('packaged runtime setup', () => {
 
     const syncEnv = run.mock.calls[0]?.[3];
     expect(syncEnv?.UV_CACHE_DIR).toBe(join(project, '..', '.uv-cache'));
+    for (const key of ['TEMP', 'TMP', 'TMPDIR'])
+      expect(syncEnv?.[key]).toBe(join(project, '..', '.tmp'));
     expect(syncEnv?.UV_PYTHON_INSTALL_DIR).toBe(join(project, '..', '.python'));
   });
   it('uses managed Python for new runtime setup and verifies native tokenizer imports', async () => {
