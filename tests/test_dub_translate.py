@@ -62,6 +62,9 @@ def test_flores_codes_cover_core_languages():
 @pytest.mark.parametrize('code,expected', [
     ('zh-TW', 'zho_Hant'), ('cmn-Hant', 'zho_Hant'), ('bn', 'ben_Beng'),
     ('tam', 'tam_Taml'), ('zho_Hant', 'zho_Hant'), ('xx', None), ('kas', None),
+    # Fail-before/pass-after: the bare two-letter code missed FLORES' wol_Latn
+    # (the ISO-639-3 fallback only matches "wol"), so fr -> Wolof had no NLLB route.
+    ('wo', 'wol_Latn'), ('wol', 'wol_Latn'),
 ])
 def test_nllb_language_resolution(code, expected):
     from api.routers.dub_translate import _nllb_language
@@ -980,3 +983,11 @@ def test_nllb_script_variants_and_aliases():
     assert _nllb_language("no") == _nllb_language("nb") == "nob_Latn"
     assert _nllb_language("jw") == "jav_Latn"
     assert _nllb_language("ne") == "npi_Deva"
+
+
+def test_wolof_is_offered_and_named_for_llm_translation():
+    """Wolof reaches the dub/batch pickers and LLM prompts name it in full."""
+    from api.routers.dub_translate import LANG_NAMES
+
+    assert "wo" in {c.lower() for c in _picker_codes()}
+    assert LANG_NAMES["wo"] == "Wolof"

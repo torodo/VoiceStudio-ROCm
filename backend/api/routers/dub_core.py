@@ -745,7 +745,7 @@ _DUB_SOURCE_LANG_CODES = frozenset({
     "mi", "mr", "mn", "ne", "no", "ps", "fa", "pl", "pt", "pa", "ro",
     "ru", "sm", "gd", "sr", "sn", "sd", "si", "sk", "sl", "so", "es",
     "su", "sw", "sv", "tg", "ta", "te", "th", "tr", "uk", "ur", "uz",
-    "vi", "cy", "xh", "yi", "yo", "zu",
+    "vi", "cy", "wo", "xh", "yi", "yo", "zu",
     "as", "ba", "bo", "br", "fo", "lb", "ln", "mg", "nn", "oc", "sa",
     "tk", "tl", "tt", "yue", "zh",
 })

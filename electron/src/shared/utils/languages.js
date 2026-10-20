@@ -87,6 +87,7 @@ export const LANG_CODES = [
   { code: 'uz', label: 'Uzbek' },
   { code: 'vi', label: 'Vietnamese' },
   { code: 'cy', label: 'Welsh' },
+  { code: 'wo', label: 'Wolof' },
   { code: 'xh', label: 'Xhosa' },
   { code: 'yi', label: 'Yiddish' },
   { code: 'yo', label: 'Yoruba' },
