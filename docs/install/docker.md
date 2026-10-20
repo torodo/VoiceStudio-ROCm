@@ -177,6 +177,9 @@ and the other cards in AMD's
    install. That recipe ships in this checkout's code: `.\scripts\wsl-rocm.ps1 build`
    builds the image from the checkout and switches the profile to it
    (`build --published` switches back; `update` rebuilds a local image).
+   For transcription, pick **PyTorch Whisper** (CTranslate2 engines have no
+   ROCm backend) and install **Whisper large-v3 (PyTorch)** from Model
+   Catalogue; the profile sets `OMNIVOICE_PYTORCH_ASR_MODEL` to that model.
 
 ```bash
 docker run -d --name omnivoice \

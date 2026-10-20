@@ -100,6 +100,20 @@ models:
     platforms: [cuda, rocm]
     curated_on: [rocm]
     note: "CTranslate2 has no ROCm backend, so on AMD GPUs this PyTorch build is the accelerated route."
+    # The repo also carries Flax, fp32-sharded and .bin copies of the same
+    # weights (24.7 GB in all); the transformers pipeline loads only these.
+    allow_patterns:
+      - "config.json"
+      - "generation_config.json"
+      - "preprocessor_config.json"
+      - "tokenizer.json"
+      - "tokenizer_config.json"
+      - "vocab.json"
+      - "merges.txt"
+      - "normalizer.json"
+      - "added_tokens.json"
+      - "special_tokens_map.json"
+      - "model.safetensors"
 
   - repo_id: "mlx-community/whisper-tiny-mlx"
     label: "Whisper tiny (MLX ASR — fast fallback)"

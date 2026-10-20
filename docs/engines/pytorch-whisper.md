@@ -39,6 +39,13 @@ macOS, Windows, and Linux.
 transformers-format Whisper repo works. Weights download on first load — see
 [downloading-models](../downloading-models.md).
 
+On AMD GPUs the Model Catalogue curates `openai/whisper-large-v3` instead
+(about 3 GB: the catalogue installs only `model.safetensors` and the
+tokenizer/config files, not the repository's Flax, fp32 and `.bin` copies).
+The `rocm-wsl` Docker profile sets `OMNIVOICE_PYTORCH_ASR_MODEL` to it, so the
+engine loads the model the catalogue installed. Verified on an RX 7800 XT
+under WSL2: fp16 on the GPU, about 4.4 GB of VRAM.
+
 ## VRAM preflight
 
 Loading a model onto a nearly-full card "succeeds", and then the first

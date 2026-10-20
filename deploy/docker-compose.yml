@@ -201,6 +201,9 @@ services:
       # from here; it uses the image's /opt/rocm, so keep it on the image's
       # ROCm release (tests/test_docker_admin_auth_docs.py ties the two).
       - OMNIVOICE_ROCM_FIND_LINKS=https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2.4/
+      # PyTorch Whisper is the GPU ASR on AMD; load the catalogue's curated
+      # ROCm model (not the app-wide turbo default, which it does not offer).
+      - OMNIVOICE_PYTORCH_ASR_MODEL=${OMNIVOICE_PYTORCH_ASR_MODEL:-openai/whisper-large-v3}
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3900/health"]
       interval: 30s

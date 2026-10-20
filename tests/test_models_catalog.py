@@ -141,3 +141,26 @@ def test_single_cross_platform_dictation_recommendation_is_whisper_tiny():
     sherpa = [m for m in _models() if m.get("engine") == "sherpa-onnx"]
     recommended = [m["dictation_id"] for m in sherpa if "all" in (m.get("curated_on") or [])]
     assert recommended == ["sherpa-whisper-tiny"]
+
+
+def test_transformers_whisper_installs_only_the_weights_its_pipeline_loads():
+    """Fail-before/pass-after: openai/whisper-large-v3 had no allow_patterns,
+    so the catalogue's 3.1 GB install pulled the whole repo (24.7 GB: Flax,
+    fp32 shards and a .bin copy of the same weights)."""
+    import fnmatch
+    from pathlib import Path
+
+    import yaml
+
+    catalog = yaml.safe_load(
+        (Path(__file__).resolve().parents[1] / "backend/config/models.yaml").read_text(encoding="utf-8")
+    )
+    whispers = [m for m in catalog["models"] if m["repo_id"].startswith("openai/whisper-")]
+    assert whispers
+    for model in whispers:
+        patterns = model.get("allow_patterns") or []
+        assert "model.safetensors" in patterns, model["repo_id"]
+        for unwanted in ("flax_model.msgpack", "pytorch_model.bin",
+                         "model.fp32-00001-of-00002.safetensors",
+                         "pytorch_model.fp32-00001-of-00002.bin"):
+            assert not any(fnmatch.fnmatch(unwanted, p) for p in patterns), (model["repo_id"], unwanted)

@@ -18,7 +18,8 @@ _EXPECTED = {
     "whisperx": ("cuda", "cpu"),
     "faster-whisper": ("cuda", "cpu"),
     "mlx-whisper": ("mps", "cpu"),
-    "pytorch-whisper": ("cuda", "mps", "cpu"),
+    # Verified on ROCm (RX 7800 XT, WSL2): the curated AMD route.
+    "pytorch-whisper": ("cuda", "rocm", "mps", "cpu"),
     "nemo-parakeet": ("cuda", "cpu"),
     # MLX runs on Apple Silicon's unified-memory GPU only; is_available
     # hard-gates on mlx_supported(), so claiming cpu would be false.
@@ -64,10 +65,37 @@ def test_compat_values_are_valid(engine_id):
         assert "cpu" not in compat  # would be a false claim — is_available gates on CUDA
 
 
+# Engines whose ROCm path was verified on hardware. CTranslate2 engines
+# (faster-whisper, whisperx) have no ROCm backend and must never claim it.
+_ROCM_VERIFIED = {"pytorch-whisper"}
+
+
 def test_no_asr_engine_falsely_claims_rocm():
     # ROCm is intentionally unclaimed until verified per engine (see ABC note).
     for engine_id in _EXPECTED:
-        assert "rocm" not in _cls(engine_id).gpu_compat
+        claims = "rocm" in _cls(engine_id).gpu_compat
+        assert claims == (engine_id in _ROCM_VERIFIED), engine_id
+
+
+def test_the_curated_rocm_asr_model_runs_on_an_engine_that_claims_rocm():
+    """Fail-before/pass-after: the catalogue curated openai/whisper-large-v3
+    as THE accelerated ASR on AMD, while pytorch-whisper declared no ROCm, so
+    routing reported CPU for the model it recommended there."""
+    import yaml
+    from pathlib import Path
+
+    catalog = yaml.safe_load(
+        (Path(__file__).resolve().parents[1] / "backend/config/models.yaml").read_text(encoding="utf-8")
+    )
+    # `platforms: [..., rocm]` offers a model ONLY to GPU hosts, so its engine
+    # must accelerate there. (`curated_on: rocm` alone is weaker: faster-whisper
+    # is curated on ROCm hosts as the robust CPU pick.)
+    gpu_only = [m for m in catalog["models"]
+                if m.get("role") == "ASR" and "rocm" in (m.get("platforms") or [])]
+    assert gpu_only
+    for model in gpu_only:
+        for engine_id in model["engines"]:
+            assert "rocm" in _cls(engine_id).gpu_compat, (model["repo_id"], engine_id)
 
 
 def test_nemo_parakeet_has_no_cuda_gate(monkeypatch):

@@ -92,6 +92,7 @@ def test_compose_wsl_rocm_service_carries_the_dxg_bridge():
         'profiles: ["rocm-wsl"]',
         "image: ${VOICESTUDIO_ROCM_IMAGE:-ghcr.io/debpalash/voicestudio:stable-rocm}",
         "GPU_FLAVOR: rocm",
+        "OMNIVOICE_PYTORCH_ASR_MODEL=${OMNIVOICE_PYTORCH_ASR_MODEL:-openai/whisper-large-v3}",
         "- /dev/dxg",
         "/usr/lib/wsl/lib/libdxcore.so:/usr/lib/libdxcore.so:ro",
         "/opt/rocm/lib/librocdxg.so:/usr/lib/librocdxg.so:ro",
