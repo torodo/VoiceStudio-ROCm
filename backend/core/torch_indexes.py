@@ -55,6 +55,15 @@ UV_PIP_CPU_ARGS: tuple[str, ...] = (
 PYTORCH_ROCM_INDEX_URL = "https://download.pytorch.org/whl/rocm6.4"
 ROCM_TORCH_PINS: tuple[str, ...] = ("torch==2.8.0", "torchaudio==2.8.0")
 
+# Opt-in source for an engine that pins its own torch pair (VoxCPM2): AMD's
+# ROCm wheel page for the host's ROCm release, e.g.
+# https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2.4/. Those wheels link the
+# system ROCm in /opt/rocm instead of bundling an older runtime, which is what
+# lets a sidecar reach the GPU through WSL2's ROCDXG bridge (it needs ROCm
+# 7.1+; the rocm6.4 index above bundles 6.4). It is a find-links page, not a
+# PEP 503 index, and only consulted when this variable is set.
+ROCM_FIND_LINKS_ENV = "OMNIVOICE_ROCM_FIND_LINKS"
+
 UV_PIP_ROCM_ARGS: tuple[str, ...] = (
     "--extra-index-url",
     PYTORCH_ROCM_INDEX_URL,

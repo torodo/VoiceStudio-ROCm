@@ -40,6 +40,7 @@ metadata and the backend fallback mirror it.
 ### Docs
 
 - Radeon GPUs on Windows: run the ROCm backend in WSL2 with `scripts/wsl-rocm-setup.sh`, the new `rocm-wsl` compose profile and the `scripts/wsl-rocm.ps1` start/stop launcher; the WSL `docker run` no longer mounts a `dids.conf` that `librocdxg` 1.2.0 does not ship
+- VoxCPM2 on AMD GPUs: with `OMNIVOICE_ROCM_FIND_LINKS` set (the `rocm-wsl` profile does it), its one-click install takes AMD's ROCm PyTorch instead of the CPU build; `scripts/wsl-rocm.ps1 install` and `build` install engines and build the image from WSL
 - OmniVoice GGUF docs state that the installers do not ship its native binary yet (#3026) — thanks @DestinyQJY!
 - Contributor guides and the pull request template explain how to sign the CLA before opening a first pull request (#2676)
 

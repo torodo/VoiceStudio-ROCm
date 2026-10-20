@@ -1941,7 +1941,7 @@ class VoxCPM2Backend(TTSBackend):
     max_ref_seconds = _VOXCPM_REF_MAX_S
     ref_strategy = "head"
     applies_own_mastering = True  # native 48 kHz studio output — skip apply_mastering()
-    gpu_compat = ("cuda", "mps", "cpu")
+    gpu_compat = ("cuda", "rocm", "mps", "cpu")
 
     def __init__(self):
         self._model = None

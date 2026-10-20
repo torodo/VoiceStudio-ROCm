@@ -19,7 +19,7 @@ zero-shot voice cloning, and — uniquely among VoiceStudio's engines —
 
 - Python ≥ 3.10, PyTorch ≥ 2.5.
 - CUDA ≥ 12 recommended for full speed; MPS (Apple Silicon) and CPU also
-  work.
+  work. AMD GPUs run it through ROCm 7.x on Linux and WSL2 (see below).
 
 ## Setup
 
@@ -82,6 +82,20 @@ puts VoxCPM2 in its own Python environment under its data directory and runs
 it there, in a separate process. It installs the CUDA build of PyTorch on an
 NVIDIA GPU, the CPU build on other Windows and Linux machines, and the
 regular build on Apple Silicon.
+
+**AMD GPUs (ROCm 7.x, Linux and WSL2).** Set `OMNIVOICE_ROCM_FIND_LINKS` to
+AMD's wheel page for the installed ROCm release, e.g.
+`https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2.4/`, before installing.
+VoiceStudio then installs AMD's ROCm build of VoxCPM2's PyTorch pair (in a
+Python 3.12 environment when that is the only one AMD ships) plus a CPU
+`torchcodec`; those wheels use the system ROCm, which is what reaches the GPU
+through WSL2's ROCDXG bridge. Without the variable, or when AMD has no build of
+the pinned version, it keeps installing the CPU build. The `rocm-wsl` Docker
+profile sets the variable for you. An install made before the variable was set
+keeps its CPU build: uninstall and install again. Measured on an RX 7800 XT
+under WSL2: about 3× faster than the CPU, still slower than real time, because
+each CPU↔GPU synchronisation costs more through the WSL bridge than on native
+Linux.
 
 Nothing it installs touches VoiceStudio itself or any other engine, and
 **Uninstall** in the same row removes only that folder. An existing

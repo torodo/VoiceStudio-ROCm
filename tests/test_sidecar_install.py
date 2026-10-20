@@ -49,6 +49,9 @@ def _clean_state(monkeypatch, tmp_path):
     monkeypatch.delenv("OMNIVOICE_INDEXTTS_DIR", raising=False)
     monkeypatch.delenv("OMNIVOICE_FAKE_SIDE_DIR", raising=False)
     monkeypatch.delenv("OMNIVOICE_DESKTOP_CONTAINED", raising=False)
+    monkeypatch.setenv("OMNIVOICE_ROCM_FIND_LINKS", "")
+    monkeypatch.delenv("OMNIVOICE_ROCM_FIND_LINKS")
+    monkeypatch.setattr(si, "_AMD_PAGE_CACHE", {})
     # Set-then-delete: a bare delenv of an unset var records nothing to
     # restore, so a path an install test persists would leak into later
     # suites (an engine would then find a venv that no longer exists).
@@ -1979,3 +1982,99 @@ def test_engines_dir_env_relocates_managed_roots(monkeypatch, tmp_path):
     elsewhere = tmp_path / "bigdrive"
     monkeypatch.setenv("OMNIVOICE_ENGINES_DIR", str(elsewhere))
     assert si.managed_root(spec) == elsewhere / spec.engine_id
+
+
+# ── AMD ROCm wheels for engines that pin their own torch pair (VoxCPM2) ────
+
+_AMD_URL = "https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2.4/"
+# Shape of AMD's real page: cp312-only, %2B-encoded local versions, plus a dev
+# build of the same version that must never satisfy the pin.
+_AMD_PAGE = """
+<a href="torch-2.11.0%2Brocm7.2.4.lw.git5fbd98f3-cp312-cp312-linux_x86_64.whl">
+<a href="torch-2.11.0.dev20260921%2Brocm7.2.4.lw.git61388d78-cp312-cp312-linux_x86_64.whl">
+<a href="torchaudio-2.11.0%2Brocm7.2.4.git143129b5-cp312-cp312-linux_x86_64.whl">
+<a href="torch-2.8.0%2Brocm7.2.4.lw.git6bea3e0b-cp312-cp312-linux_x86_64.whl">
+"""
+
+
+def _amd_host(monkeypatch, family="rocm", page=_AMD_PAGE, url=_AMD_URL):
+    monkeypatch.delenv("OMNIVOICE_TORCH_VARIANT", raising=False)
+    monkeypatch.setattr(si.sys, "platform", "linux")
+    if url:
+        monkeypatch.setenv("OMNIVOICE_ROCM_FIND_LINKS", url)
+    monkeypatch.setattr(si, "_amd_wheel_page", lambda _url: page)
+    return _capture_install_argvs(monkeypatch, family=family)
+
+
+def test_rocm_host_with_amd_find_links_installs_amd_torch_for_voxcpm2(monkeypatch):
+    """Fail-before/pass-after: VoxCPM2 took the +cpu torch on every ROCm host,
+    so it never reached an AMD GPU. With AMD's page opted in it gets AMD's
+    exact ROCm build of its pinned pair, in a Python AMD ships (cp312), and a
+    CPU torchcodec instead of PyPI's CUDA one."""
+    argvs = _amd_host(monkeypatch)
+    spec = si.get_spec("voxcpm2")
+    job = si._new_job("voxcpm2")
+
+    si._step_create_venv(spec, job)
+    venv_cmd = next(a for a in argvs if a[1] == "venv")
+    assert venv_cmd[venv_cmd.index("--python") + 1] == "3.12"
+
+    venv = si.managed_checkout(spec) / ".venv"
+    (venv / "pyvenv.cfg").write_text("version_info = 3.12.3\n")
+    si._step_install_deps(spec, job)
+    pip = next(a for a in argvs if a[1:3] == ["pip", "install"])
+    assert "torch==2.11.0+rocm7.2.4.lw.git5fbd98f3" in pip
+    assert "torchaudio==2.11.0+rocm7.2.4.git143129b5" in pip
+    assert pip[pip.index("--find-links") + 1] == _AMD_URL
+    assert pip[pip.index("--extra-index-url") + 1] == "https://download.pytorch.org/whl/cpu"
+    assert not any(a.endswith("+cpu") and a.startswith("torch") for a in pip)
+
+
+def test_amd_route_keeps_the_cpu_build_when_amd_lacks_the_pinned_version(monkeypatch):
+    """A missing AMD build must never turn a working CPU install into a
+    failed one, nor let a bare pin resolve to PyPI's CUDA wheel."""
+    argvs = _amd_host(monkeypatch, page=_AMD_PAGE.replace("2.11.0", "2.10.0"))
+    spec = si.get_spec("voxcpm2")
+    job = si._new_job("voxcpm2")
+
+    si._step_create_venv(spec, job)
+    venv_cmd = next(a for a in argvs if a[1] == "venv")
+    assert venv_cmd[venv_cmd.index("--python") + 1] == "3.11"
+    si._step_install_deps(spec, job)
+    pip = next(a for a in argvs if a[1:3] == ["pip", "install"])
+    assert "torch==2.11.0+cpu" in pip and "--find-links" not in pip
+    assert any("installing the CPU build instead" in line for line in job["log"])
+
+
+@pytest.mark.parametrize("family", ["cuda", "cpu"])
+def test_amd_find_links_is_ignored_off_rocm_hosts(monkeypatch, family):
+    argvs = _amd_host(monkeypatch, family=family)
+    spec = si.get_spec("voxcpm2")
+    si._step_install_deps(spec, si._new_job("voxcpm2"))
+    pip = next(a for a in argvs if a[1:3] == ["pip", "install"])
+    assert "--find-links" not in pip
+    assert not any("+rocm" in a for a in pip)
+
+
+def test_amd_route_rebuilds_a_venv_on_a_python_amd_does_not_ship(monkeypatch):
+    """A VoxCPM2 venv made on 3.11 before the opt-in cannot take cp312 wheels."""
+    argvs = _amd_host(monkeypatch)
+    spec = si.get_spec("voxcpm2")
+    venv = si.managed_checkout(spec) / ".venv"
+    py = si._venv_python(venv)
+    py.parent.mkdir(parents=True, exist_ok=True)
+    py.write_text("#!fake python\n")
+    (venv / "pyvenv.cfg").write_text("version_info = 3.11.9\n")
+
+    si._step_create_venv(spec, si._new_job("voxcpm2"))
+    venv_cmd = next(a for a in argvs if a[1] == "venv")
+    assert venv_cmd[venv_cmd.index("--python") + 1] == "3.12"
+
+
+def test_amd_route_never_reaches_engines_with_other_pins(monkeypatch):
+    """MOSS-TTS-Nano pins torch 2.7.0, which this page does not carry."""
+    argvs = _amd_host(monkeypatch)
+    spec = si.get_spec("moss-tts-nano")
+    si._step_install_deps(spec, si._new_job("moss-tts-nano"))
+    pip = next(a for a in argvs if a[1:3] == ["pip", "install"])
+    assert "--find-links" not in pip

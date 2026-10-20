@@ -167,6 +167,16 @@ and the other cards in AMD's
    settings. The manual equivalent is
    `docker compose --env-file ~/.voicestudio.env -f deploy/docker-compose.yml --profile rocm-wsl up -d`,
    or the `docker run` below.
+5. **Optional engines.** The catalogue refuses one-click installs from the
+   browser ("Remote installation is disabled"): the installer only accepts
+   requests from the backend's own loopback. `.\scripts\wsl-rocm.ps1 install voxcpm2`
+   sends that request from inside the container, follows the job, and keeps the
+   engine in the data volume across `update`. The profile sets
+   `OMNIVOICE_ROCM_FIND_LINKS`, so VoxCPM2 gets AMD's ROCm build of its PyTorch
+   (see [VoxCPM2](../engines/voxcpm2.md)); `--reinstall` replaces an earlier CPU
+   install. That recipe ships in this checkout's code: `.\scripts\wsl-rocm.ps1 build`
+   builds the image from the checkout and switches the profile to it
+   (`build --published` switches back; `update` rebuilds a local image).
 
 ```bash
 docker run -d --name omnivoice \

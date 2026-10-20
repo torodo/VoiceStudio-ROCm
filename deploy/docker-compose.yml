@@ -162,7 +162,15 @@ services:
   # /opt/rocm/share/rocdxg/dids.conf:/usr/share/rocdxg/dids.conf mounted.
   # ptrace + unconfined seccomp weaken isolation: keep the port on loopback.
   omnivoice-rocm-wsl:
-    image: ghcr.io/debpalash/voicestudio:stable-rocm
+    # A locally built image (`bash scripts/wsl-rocm.sh build`) sets
+    # VOICESTUDIO_ROCM_IMAGE; otherwise the published release is used.
+    image: ${VOICESTUDIO_ROCM_IMAGE:-ghcr.io/debpalash/voicestudio:stable-rocm}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        BASE_IMAGE: rocm/pytorch:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.8.0
+        GPU_FLAVOR: rocm
     container_name: omnivoice-studio-rocm-wsl
     profiles: ["rocm-wsl"]
     ports:
@@ -189,6 +197,10 @@ services:
       - OMNIVOICE_API_KEY=${OMNIVOICE_API_KEY:?export a long random OMNIVOICE_API_KEY before starting a Studio profile}
       # ROCm 7.2.x loads the WSL bridge only with this opt-in (ROCm 7.13+ drops it).
       - HSA_ENABLE_DXG_DETECTION=1
+      # Engines that pin their own torch (VoxCPM2) install AMD's ROCm build
+      # from here; it uses the image's /opt/rocm, so keep it on the image's
+      # ROCm release (tests/test_docker_admin_auth_docs.py ties the two).
+      - OMNIVOICE_ROCM_FIND_LINKS=https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2.4/
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3900/health"]
       interval: 30s

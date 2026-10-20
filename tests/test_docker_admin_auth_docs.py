@@ -90,6 +90,8 @@ def test_compose_wsl_rocm_service_carries_the_dxg_bridge():
 
     for required in (
         'profiles: ["rocm-wsl"]',
+        "image: ${VOICESTUDIO_ROCM_IMAGE:-ghcr.io/debpalash/voicestudio:stable-rocm}",
+        "GPU_FLAVOR: rocm",
         "- /dev/dxg",
         "/usr/lib/wsl/lib/libdxcore.so:/usr/lib/libdxcore.so:ro",
         "/opt/rocm/lib/librocdxg.so:/usr/lib/librocdxg.so:ro",
@@ -119,6 +121,12 @@ def test_wsl_rocm_launcher_drives_the_wsl_profile_without_leaking_the_key():
     assert script.count("printf '%s\\n' \"$key\"") == 1
     assert 'if [ "${1:-}" = "--show" ]; then' in script
     assert "wsl-rocm.sh" in launcher
+    # Engine installs go through the container's own loopback (the only place
+    # the one-click installer accepts them) instead of loosening that gate.
+    assert 'docker exec "$CONTAINER" curl' in script
+    assert "http://localhost:3900/engines/sidecar/${engine}/install" in script
+    assert 'LOCAL_IMAGE="voicestudio-rocm:local"' in script
+    assert "'build', 'install'" in launcher
 
 
 def test_wsl_rocm_setup_pins_match_the_rocm_image():
@@ -139,6 +147,17 @@ def test_wsl_rocm_setup_pins_match_the_rocm_image():
 
     assert host_rocm == image_rocm.group(1)
     assert deb.startswith(f"amdgpu-install_{host_rocm}.")
+
+    # AMD's sidecar wheels link the image's /opt/rocm, and the local build
+    # must start from the same base the published image does.
+    compose = (ROOT / "deploy/docker-compose.yml").read_text(encoding="utf-8")
+    service = compose.split("  omnivoice-rocm-wsl:", 1)[1].split("\nvolumes:", 1)[0]
+    assert (
+        "OMNIVOICE_ROCM_FIND_LINKS=https://repo.radeon.com/rocm/manylinux/"
+        f"rocm-rel-{host_rocm}/"
+    ) in service
+    base = re.search(r"BASE_IMAGE=(rocm/pytorch:\S+)", workflow).group(1)
+    assert f"BASE_IMAGE: {base}" in service
     if tuple(map(int, host_rocm.split(".")[:2])) < (7, 13):
         assert rocdxg == "1.2.0"
         assert "HSA_ENABLE_DXG_DETECTION=1" in script

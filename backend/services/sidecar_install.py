@@ -255,6 +255,27 @@ def _torch_pin_args(spec: "SidecarSpec") -> list[str]:
     return list(spec.torch_pins)
 
 
+def _amd_or_host_torch_args(spec: "SidecarSpec", venv_dir: Path, job: dict) -> list[str]:
+    """The torch pair for a ``torch_pins`` engine: AMD's ROCm build when the
+    user opted in and AMD ships it for this venv's Python, else the host's
+    usual build (+cu128 / +cpu / plain)."""
+    from core.torch_indexes import UV_PIP_CPU_ARGS
+
+    url = _amd_rocm_find_links()
+    if url:
+        minor = _venv_python_minor(venv_dir) or _spec_python_minor(spec) or ""
+        pins = _amd_rocm_torch_pins(spec, minor) if minor else None
+        if pins:
+            _log(job, f"Using AMD ROCm wheels ({', '.join(pins)}) from {url}")
+            # The CPU index supplies a CPU torchcodec: PyPI's is built for
+            # CUDA and fails to load on an AMD host. Local versions sort above
+            # public ones, so best-match picks the +cpu / +rocm builds.
+            return [*pins, "--find-links", url, *UV_PIP_CPU_ARGS]
+        _log(job, f"No AMD ROCm build of {', '.join(spec.torch_pins)} for Python "
+                  f"{minor or '?'} at {url}; installing the CPU build instead.")
+    return _torch_pin_args(spec)
+
+
 def _rocm_index_url() -> Optional[str]:
     """The ROCm wheel index when this sidecar should take a ROCm torch, else None.
 
@@ -307,6 +328,90 @@ def _rocm_pin_args() -> list[str]:
         for arg in UV_PIP_ROCM_ARGS
     ]
     return ["--no-sources", *(f"{pin}{tag}" for pin in ROCM_TORCH_PINS), *idx_args]
+
+
+_AMD_PAGE_CACHE: dict[str, str] = {}
+
+
+def _amd_rocm_find_links() -> Optional[str]:
+    """AMD's ROCm wheel page when the user opted in on a ROCm Linux host."""
+    from core.torch_indexes import ROCM_FIND_LINKS_ENV
+
+    url = (os.environ.get(ROCM_FIND_LINKS_ENV) or "").strip()
+    if not url or not sys.platform.startswith("linux") or _rocm_index_url() is None:
+        return None
+    return url
+
+
+def _amd_wheel_page(url: str) -> str:
+    """The find-links page text, fetched once per process; "" when unreachable."""
+    if url not in _AMD_PAGE_CACHE:
+        import urllib.request
+
+        try:
+            with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310 — user-set https URL
+                _AMD_PAGE_CACHE[url] = resp.read().decode("utf-8", "replace")
+        except (OSError, ValueError) as exc:
+            logger.warning("AMD ROCm wheel page unreachable (%s): %s", url, exc)
+            return ""
+    return _AMD_PAGE_CACHE[url]
+
+
+def _amd_rocm_torch_pins(spec: "SidecarSpec", python_minor: str) -> Optional[list[str]]:
+    """Exact AMD ROCm builds of ``spec.torch_pins`` for *python_minor*, or None.
+
+    The pins name the local version (``torch==2.11.0+rocm7.2.4.lw.git…``):
+    with PyPI also in play, a bare ``torch==2.11.0`` would quietly resolve to
+    the CUDA wheel whenever AMD has no matching build, and the engine would
+    run on the CPU while the install reported success. None means "keep the
+    existing +cpu route", never a failed install.
+    """
+    url = _amd_rocm_find_links()
+    if not url or not spec.torch_pins:
+        return None
+    page = _amd_wheel_page(url)
+    tag = "cp" + python_minor.replace(".", "")
+    pins = []
+    for pin in spec.torch_pins:
+        name, _, version = pin.partition("==")
+        match = re.search(
+            rf"{re.escape(name)}-{re.escape(version)}(?:%2B|\+)(rocm[0-9A-Za-z.]+)"
+            rf"-{tag}-{tag}-linux_x86_64\.whl",
+            page,
+        )
+        if not match:
+            return None
+        pins.append(f"{name}=={version}+{match.group(1)}")
+    return pins
+
+
+def _spec_python_minor(spec: "SidecarSpec") -> Optional[str]:
+    args = list(spec.venv_args)
+    if "--python" in args and args.index("--python") + 1 < len(args):
+        return args[args.index("--python") + 1]
+    return None
+
+
+def _amd_rocm_python(spec: "SidecarSpec") -> Optional[str]:
+    """The venv Python the AMD route needs, or None when it does not apply.
+
+    The spec's own Python first; AMD publishes some releases for cp312 only
+    (7.2.4 among them), so 3.12 is the second choice.
+    """
+    for minor in dict.fromkeys(m for m in (_spec_python_minor(spec), "3.12") if m):
+        if _amd_rocm_torch_pins(spec, minor):
+            return minor
+    return None
+
+
+def _venv_python_minor(venv_dir: Path) -> Optional[str]:
+    """``"3.12"`` from the venv's ``pyvenv.cfg`` (uv and venv both write it)."""
+    try:
+        text = (venv_dir / "pyvenv.cfg").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = re.search(r"^version(?:_info)?\s*=\s*(\d+)\.(\d+)", text, flags=re.M)
+    return f"{match.group(1)}.{match.group(2)}" if match else None
 
 
 def venv_torch_hip(venv_dir: Path) -> Optional[bool]:
@@ -1579,8 +1684,18 @@ def _step_create_venv(spec: SidecarSpec, job: dict) -> None:
     checkout = managed_checkout(spec)
     venv_dir = checkout / ".venv"
     py = _venv_python(venv_dir)
+    venv_args = list(spec.venv_args)
+    amd_python = _amd_rocm_python(spec)
+    if amd_python:
+        # AMD's ROCm wheels exist for fewer Python versions than PyPI's; the
+        # venv must be created on one they ship, before any dependency step.
+        if "--python" in venv_args:
+            venv_args[venv_args.index("--python") + 1] = amd_python
+        else:
+            venv_args += ["--python", amd_python]
     if py.is_file():
-        if _existing_venv_compatible(spec, py):
+        amd_mismatch = bool(amd_python) and _venv_python_minor(venv_dir) not in (None, amd_python)
+        if not amd_mismatch and _existing_venv_compatible(spec, py):
             step["state"] = "done"
             step["detail"] = "venv already present"
             _log(job, "Compatible .venv already present — skipping.")
@@ -1601,7 +1716,7 @@ def _step_create_venv(spec: SidecarSpec, job: dict) -> None:
     # uv_subprocess_env. The cache parent is the shared engines root, so
     # every sidecar engine reuses one cache.
     uv_env = uv_subprocess_env(Path(get_engines_dir(DATA_DIR)))
-    rc = _run_logged(job, [uv, "venv", str(venv_dir), *spec.venv_args],
+    rc = _run_logged(job, [uv, "venv", str(venv_dir), *venv_args],
                      timeout=_UV_VENV_TIMEOUT_S, env=uv_env)
     if rc != 0 or not py.is_file():
         raise _StepError(
@@ -1634,7 +1749,7 @@ def _step_install_deps(spec: SidecarSpec, job: dict) -> None:
     if _rocm_index_url() and spec.uses_rocm_index:
         target += _rocm_pin_args()
     elif spec.torch_pins:
-        target += _torch_pin_args(spec)
+        target += _amd_or_host_torch_args(spec, checkout / ".venv", job)
     elif spec.cpu_torch_index:
         from core.torch_indexes import UV_PIP_CPU_ARGS
         target += list(UV_PIP_CPU_ARGS)
