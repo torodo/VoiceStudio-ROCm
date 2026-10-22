@@ -64,6 +64,8 @@ _REF_ALLOWLIST = (
     "Engine install folders can no longer be set to a typed path",
     # fork-owner WSL2 ROCm launcher fix (feat/voxcpm2-rocm), no public issue
     "The WSL2 ROCm launcher keeps the WSL VM alive while the backend runs",
+    # fork-owner WSL2 ROCm idle-CPU fix (feat/voxcpm2-rocm), no public issue
+    "AMD on WSL2: an idle ROCm backend with a compiled model",
 )
 
 _HEADING = re.compile(r"^## \[([^\]]+)\](?:\s*[—–-]\s*(.*))?$")

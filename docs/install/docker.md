@@ -207,6 +207,18 @@ on `127.0.0.1` and do not run untrusted workloads in this container. See AMD's
 [`librocdxg` WSL container instructions](https://github.com/ROCm/librocdxg#4-container-launch--wsl-specific-flags)
 for the driver/runtime compatibility matrix.
 
+**Idle CPU.** ROCm 7.2.x gets no GPU interrupts through ROCDXG, so every process
+that has used the GPU keeps two CPU threads busy-polling, idle included, until
+it exits ([ROCm/legacy-rocm-build#6371](https://github.com/ROCm/legacy-rocm-build/issues/6371);
+throttled upstream by [ROCm/rocm-systems#7898](https://github.com/ROCm/rocm-systems/pull/7898),
+which 7.2.x does not include). Expect about two busy cores while the backend
+runs; `.\scripts\wsl-rocm.ps1 stop` frees them. On this host the backend sets
+`TORCHINDUCTOR_COMPILE_THREADS=1`, so `torch.compile` compiles in-process
+instead of starting a compile pool that would add a second such process; set
+the variable yourself to override it. Engine sidecars pay the same cost while
+they are loaded and exit after `OMNIVOICE_SIDECAR_IDLE_TIMEOUT_S` (300 s by
+default).
+
 #### WSL2 architecture compatibility matrix
 
 VoiceStudio classifies the architecture result separately from device-node

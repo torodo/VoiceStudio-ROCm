@@ -20,6 +20,7 @@ metadata and the backend fallback mirror it.
 ### Fixed
 
 - The WSL2 ROCm launcher keeps the WSL VM alive while the backend runs, so the container no longer stops a minute after `start` when the VM idles out
+- AMD on WSL2: an idle ROCm backend with a compiled model now keeps two CPU cores busy instead of four, because `torch.compile` no longer starts a compile pool that polls the GPU too; the remaining two come from ROCm 7.2.x itself ([details](docs/install/docker.md#amd-gpu-on-wsl2))
 - Generated speech no longer starts and ends with silence, and `[pause]` markers give exactly the pause you asked for (Raw preset and explicit durations untouched) (#3080)
 - Engine sidecars no longer load PyTorch just to answer the Test Engine ping, and a failed test logs its reason locally (#3026) — thanks @tekay-de!
 

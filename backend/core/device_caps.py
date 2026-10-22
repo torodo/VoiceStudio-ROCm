@@ -208,6 +208,45 @@ def _rocm_requires_dxg_detection(version: object) -> bool:
         return True
 
 
+#: Where a WSL process finds librocdxg: the Docker mount above, or the host's
+#: own ROCm install when the backend runs directly inside the distribution.
+_ROCDXG_LIBRARIES = ("/usr/lib/librocdxg.so", "/opt/rocm/lib/librocdxg.so")
+
+
+def is_rocdxg_host() -> bool:
+    """Whether this process reaches an AMD GPU through WSL2's ROCDXG bridge.
+
+    File checks only, no torch import, so ``main`` can call it before torch
+    reads its import-time environment. NVIDIA on WSL also exposes /dev/dxg but
+    ships no librocdxg, so it is not matched.
+    """
+    if not sys.platform.startswith("linux"):
+        return False
+    if os.path.exists(_KFD_DEVICE) or not os.path.exists(_DXG_DEVICE):
+        return False
+    return any(os.path.exists(path) for path in _ROCDXG_LIBRARIES)
+
+
+def rocdxg_env_defaults() -> dict[str, str]:
+    """Environment defaults that keep idle CPU down on a ROCDXG host.
+
+    ROCDXG has no GPU interrupts, and ROCm 7.2.x's HSA runtime answers that by
+    keeping two ``AsyncEventsLoop`` threads busy-polling at 100% each in every
+    process that initialises HIP, for that process's whole life, idle included
+    (ROCm/legacy-rocm-build#6371; throttled upstream by ROCm/rocm-systems#7898,
+    which 7.2.x lacks). Inductor's compile pool starts a sidecar whose
+    ``pre_fork_setup`` initialises HIP only to cache device properties, so one
+    ``torch.compile`` doubled the idle burn until the backend stopped. A single
+    compile thread keeps compilation in-process and spawns no sidecar.
+
+    Read-only, like the rest of this module: ``main`` applies the result with
+    ``setdefault`` so an explicit user value still wins.
+    """
+    if not is_rocdxg_host():
+        return {}
+    return {"TORCHINDUCTOR_COMPILE_THREADS": "1"}
+
+
 def _unusable_gpu_note(torch, gpus) -> str | None:
     """Note for the commonest silent-CPU host: hardware the torch build cannot
     drive. ``None`` when no discrete GPU is known or torch can drive it."""

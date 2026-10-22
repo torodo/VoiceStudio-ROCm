@@ -227,6 +227,15 @@ except Exception:
 # Prevent torchaudio from lazy-importing torchcodec (broken on some installs).
 # Proper fix = exclude torchcodec in pyproject.toml; this is a belt-and-braces guard.
 os.environ.setdefault("TORCHAUDIO_USE_TORCHCODEC", "0")
+
+# AMD on WSL2 (ROCDXG): every process that initialises HIP busy-polls two CPU
+# cores for its whole life, so torch.compile must not start a second one (see
+# core.device_caps.rocdxg_env_defaults). Before torch is imported; engine
+# sidecars inherit it. setdefault so an explicit user value wins.
+from core.device_caps import rocdxg_env_defaults  # noqa: E402
+
+for _key, _value in rocdxg_env_defaults().items():
+    os.environ.setdefault(_key, _value)
 sys.modules.setdefault("torchcodec", None)
 
 import warnings
