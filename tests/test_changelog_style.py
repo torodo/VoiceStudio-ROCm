@@ -62,6 +62,8 @@ _REF_ALLOWLIST = (
     "Dubbing and batch jobs accept only plain language codes",
     "Saved voice, gallery and call-recording files are read only from inside",
     "Engine install folders can no longer be set to a typed path",
+    # fork-owner WSL2 ROCm launcher fix (feat/voxcpm2-rocm), no public issue
+    "The WSL2 ROCm launcher keeps the WSL VM alive while the backend runs",
 )
 
 _HEADING = re.compile(r"^## \[([^\]]+)\](?:\s*[—–-]\s*(.*))?$")
