@@ -51,9 +51,10 @@ const bridge: VoiceStudioBridge = {
     check: () => ipcRenderer.invoke('updates:check') as Promise<UpdateState>,
     download: () => ipcRenderer.invoke('updates:download') as Promise<UpdateState>,
     dismiss: () => ipcRenderer.invoke('updates:dismiss') as Promise<UpdateState>,
+    setChannel: (channel) =>
+      ipcRenderer.invoke('updates:setChannel', channel) as Promise<UpdateState>,
     install: () => ipcRenderer.invoke('updates:install') as Promise<void>,
-    listReleases: () =>
-      ipcRenderer.invoke('updates:listReleases') as Promise<UpdateReleaseInfo[]>,
+    listReleases: () => ipcRenderer.invoke('updates:listReleases') as Promise<UpdateReleaseInfo[]>,
     onState: (cb) => subscribe<UpdateState>('updates:state', cb),
   },
   watch: {
@@ -67,6 +68,8 @@ const bridge: VoiceStudioBridge = {
     platform: process.platform,
     isDev: process.env.NODE_ENV === 'development' || !!process.env.ELECTRON_RENDERER_URL,
     onNavigate: (callback) => subscribe<string>('app:navigate', callback),
+    isFullScreen: () => ipcRenderer.invoke('app:is-fullscreen'),
+    onFullScreen: (callback) => subscribe<boolean>('app:fullscreen', callback),
     onPersistenceFlush: (callback) => {
       const listener = (_event: IpcRendererEvent, token: string) => {
         void (async () => {
@@ -103,6 +106,7 @@ const bridge: VoiceStudioBridge = {
     useDefaultRuntimeLocation: () => ipcRenderer.invoke('backend:useDefaultRuntimeLocation'),
     restart: () => ipcRenderer.invoke('backend:restart') as Promise<void>,
     getConnection: () => ipcRenderer.invoke('backend:getConnection'),
+    getHostSnapshot: () => ipcRenderer.invoke('backend:hostSnapshot'),
     testRemote: (input) => ipcRenderer.invoke('backend:testRemote', input),
     useRemote: (input) => ipcRenderer.invoke('backend:useRemote', input),
     useLocal: () => ipcRenderer.invoke('backend:useLocal'),

@@ -60,6 +60,7 @@ export const CHANNELS = {
   backendChooseRuntimeLocation: 'backend:chooseRuntimeLocation',
   backendUseDefaultRuntimeLocation: 'backend:useDefaultRuntimeLocation',
   backendGetConnection: 'backend:getConnection',
+  backendHostSnapshot: 'backend:hostSnapshot',
   backendTestRemote: 'backend:testRemote',
   backendUseRemote: 'backend:useRemote',
   backendUseLocal: 'backend:useLocal',
@@ -354,6 +355,11 @@ export function registerIpc(
     return supervisor.acknowledgeLastCrash();
   });
   ipcMain.handle(CHANNELS.backendGetConnection, () => supervisor.connection);
+  ipcMain.handle(CHANNELS.backendHostSnapshot, (event) => {
+    const owner = getMainWindow();
+    assertTrustedMainFrame(event, owner);
+    return supervisor.hostSnapshot();
+  });
   ipcMain.handle(CHANNELS.backendTestRemote, async (event, raw: unknown) => {
     const owner = getMainWindow();
     assertTrustedMainFrame(event, owner);
@@ -486,7 +492,7 @@ export function registerIpc(
       await supervisor.shutdown();
       stopped = true;
       await new Promise((resolve) => setTimeout(resolve, 600));
-      await scheduleUninstallCleanup(plan.paths);
+      await scheduleUninstallCleanup(plan.targets);
       await exitForUninstall();
       return { scheduled: true, size_bytes: plan.size_bytes };
     } catch (error) {
